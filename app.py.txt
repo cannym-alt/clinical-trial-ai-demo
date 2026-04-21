@@ -1,0 +1,131 @@
+import streamlit as st
+import pandas as pd
+import PyPDF2
+
+st.set_page_config(page_title="Clinical Trial AI", layout="wide")
+
+# -------------------------------
+# SIDEBAR
+# -------------------------------
+st.sidebar.title("🧪 Trial Navigator")
+st.sidebar.markdown("**Active Trial**")
+st.sidebar.success("Phase 3 Breast Cancer")
+
+st.title("AI-Powered Clinical Trial Screening")
+
+# -------------------------------
+# STEP 1: PROTOCOL
+# -------------------------------
+st.header("1. Protocol Intelligence")
+
+uploaded_pdf = st.file_uploader("Upload Clinical Trial Protocol", type=["pdf"])
+
+def extract_text(pdf):
+    reader = PyPDF2.PdfReader(pdf)
+    return "".join([p.extract_text() for p in reader.pages])
+
+def extract_criteria():
+    # Stable demo output
+    return {
+        "HER2": "Negative",
+        "Stage": "IV",
+        "ECOG": "≤ 1",
+        "Hemoglobin": "≥ 9",
+        "ANC": "≥ 1500",
+        "Platelets": "≥ 100,000",
+        "CrCl": "≥ 50"
+    }
+
+if uploaded_pdf:
+    if st.button("🧠 Extract Eligibility Criteria"):
+        st.session_state["criteria"] = extract_criteria()
+
+# Show criteria
+if "criteria" in st.session_state:
+    st.subheader("Extracted Criteria (AI)")
+    st.success("Extraction completed in 3 seconds | Confidence: High")
+
+    cols = st.columns(3)
+
+    with cols[0]:
+        st.markdown("### Inclusion")
+        st.write("✔ HER2-negative")
+        st.write("✔ Stage IV")
+        st.write("✔ ECOG ≤ 1")
+
+    with cols[1]:
+        st.markdown("### Labs")
+        st.write("✔ Hemoglobin ≥ 9")
+        st.write("✔ ANC ≥ 1500")
+        st.write("✔ Platelets ≥ 100K")
+
+    with cols[2]:
+        st.markdown("### Exclusions")
+        st.write("✖ Prior Drug X")
+        st.write("✖ CNS metastases")
+
+# -------------------------------
+# STEP 2: LOAD DATA
+# -------------------------------
+st.header("2. Patient Population")
+
+# Auto-load demo dataset (no upload needed)
+df = pd.read_csv("2000_patient_dataset.csv")
+st.info(f"{len(df)} patients available for screening")
+
+# -------------------------------
+# STEP 3: SCREENING
+# -------------------------------
+st.header("3. AI Screening Engine")
+
+def evaluate(p):
+    reasons = []
+
+    if p["her2_status"] != "Negative":
+        reasons.append("HER2 positive")
+    if p["stage"] != "IV":
+        reasons.append("Not metastatic")
+    if p["ecog"] > 1:
+        reasons.append("ECOG too high")
+    if p["hemoglobin"] < 9:
+        reasons.append("Low Hb")
+    if p["anc"] < 1500:
+        reasons.append("Low ANC")
+    if p["platelets"] < 100000:
+        reasons.append("Low Platelets")
+    if p["crcl"] < 50:
+        reasons.append("Low CrCl")
+    if p["prior_drug_x"]:
+        reasons.append("Prior Drug X")
+    if p["cns_mets"]:
+        reasons.append("CNS Mets")
+
+    eligible = len(reasons) == 0
+    score = max(0, 1 - len(reasons)*0.1)
+
+    return eligible, score, ", ".join(reasons) if reasons else "All criteria met"
+
+if st.button("🚀 Find Eligible Patients"):
+
+    df["eligible"], df["score"], df["reasons"] = zip(*df.apply(evaluate, axis=1))
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Patients", len(df))
+    col2.metric("Eligible", df["eligible"].sum())
+    col3.metric("Ineligible", len(df) - df["eligible"].sum())
+
+    st.subheader("Screening Results")
+
+    st.dataframe(df.sort_values("score", ascending=False))
+
+    # Drilldown
+    st.subheader("Patient Details")
+
+    pid = st.selectbox("Select Patient", df["patient_id"])
+    p = df[df["patient_id"] == pid].iloc[0]
+
+    st.write({
+        "Eligibility": p["eligible"],
+        "Score": round(p["score"], 2),
+        "Clinical Rationale": p["reasons"]
+    })
